@@ -15,13 +15,22 @@ $container['logger'] = function ($c) {
 // error handler
 $container['errorHandler'] = function ($c) {
     return function ($request, $response, $exception) use ($c) {
-        error_log($exception->getMessage());
-        error_log($exception->getTraceAsString());
-        $c['logger']->error($exception->getMessage());
-        $c['logger']->error($exception->getTraceAsString());
-        return $c['response']->withStatus(500)
-            ->withHeader('Content-Type', 'text/html')
-            ->write('Something went wrong!');
+        $msg   = $exception->getMessage();
+        $trace = $exception->getTraceAsString();
+
+        if ($exception instanceof \App\DocumentError) {
+            $userMsg = $msg;
+            $status  = $exception->getCode();
+            $status  = $status ?: 500;
+        } else {
+            $userMsg = 'Something went wrong!';
+            $status  = 500;
+            error_log($msg); error_log($trace);
+            $c['logger']->error($msg); $c['logger']->error($trace);
+        }
+
+        return $c['response']->withStatus($status)
+            ->withJson(['error' => $userMsg]);
     };
 };
 

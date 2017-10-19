@@ -3,14 +3,28 @@
 use Slim\Http\Request;
 use Slim\Http\Response;
 
-$app->get('/', function (Request $request, Response $response, array $args) {
-    $this->logger->info('serving "/" ... ');
-    return $this->renderer->render($response, 'index.phtml', $args);
-});
 
+//$app->group('', function() {
+//    $app = $this;//inside group
+    $id = '{id:[a-z0-9]+}';// 64 chars
+    $app->post('/api/documents/search',        '\App\Http\Api\DocumentController:index');
+    $app->post('/api/documents/upload',        '\App\Http\Api\DocumentController:create');
+    $app->post('/api/documents/retrieve/'.$id, '\App\Http\Api\DocumentController:retrieve');
+    $app->post('/api/documents/update/'.$id,   '\App\Http\Api\DocumentController:update');
+    $app->post('/api/documents/delete/'.$id,   '\App\Http\Api\DocumentController:delete');
 
-$this->get('/api', function (Request $request, Response $response, $args)
-{
+    $app->get ('/api/documents',              '\App\Http\Api\DocumentController:index');
+    $app->post('/api/documents',              '\App\Http\Api\DocumentController:create');
+    $app->get('/api/documents/'.$id,          '\App\Http\Api\DocumentController:retrieve');
+    $app->get('/api/documents/download/'.$id, '\App\Http\Api\DocumentController:download');
+    $app->put('/api/documents/'.$id,          '\App\Http\Api\DocumentController:update');// this may not work
+    $app->post('/api/documents/'.$id,         '\App\Http\Api\DocumentController:update');
+    $app->delete('/api/documents/'.$id,       '\App\Http\Api\DocumentController:delete');
+
+//});
+
+$app->get('/api', function (Request $request, Response $response, $args) {
+    $container = $this;// inside route
     $data = [
         'service' => 'service-documents',
         'version' => '1.0.0',
@@ -19,14 +33,8 @@ $this->get('/api', function (Request $request, Response $response, $args)
         ->write(json_encode($data));
 });
 
-$app->group('/api/documents', function() {
-
-    $this->get ('/',       '\App\Http\Api\DocumentController:index');
-    $this->post('/',       '\App\Http\Api\DocumentController:create');
-    $this->get('/{id}',    '\App\Http\Api\DocumentController:retrieve');
-    $this->put('/{id}',    '\App\Http\Api\DocumentController:update');// this may not work
-    $this->post('/{id}',   '\App\Http\Api\DocumentController:update');
-    $this->delete('/{id}', '\App\Http\Api\DocumentController:delete');
-
+$app->get('/', function (Request $request, Response $response, array $args) {
+    $container = $this;
+    $container->logger->info('serving "/" ... ');
+    return $container->renderer->render($response, 'index.phtml', $args);
 });
-

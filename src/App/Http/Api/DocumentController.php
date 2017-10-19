@@ -3,8 +3,9 @@
  * File for document controller
  */
 
-namespace App\Http;
+namespace App\Http\Api;
 
+use App\DocumentManager;
 use Slim\Container;
 use Slim\Http\Request;
 use Slim\Http\Response;
@@ -17,10 +18,26 @@ use Slim\Http\UploadedFile;
 class DocumentController
 {
 
+    const STATUS_OK                 = 200;
+    const STATUS_CREATED            = 201;
+    const STATUS_BAD_REQUEST        = 400;
+    const STATUS_UNAUTHORIZED       = 401;
+    const STATUS_PAYMENT_REQUIRED   = 402;
+    const STATUS_FORBIDDEN          = 403;
+    const STATUS_NOT_FOUND          = 404;
+    const STATUS_METHOD_NOT_ALLOWED = 405;
+    const STATUS_SERVER_ERROR       = 500;
+    const STATUS_NOT_IMPLEMENTED    = 501;
+
     /**
      * @var Container
      */
-    protected $container;
+    private $container;
+
+    /**
+     * @var DocumentManager
+     */
+    private $documentMgr;
 
     /**
      * DocumentController constructor.
@@ -28,6 +45,9 @@ class DocumentController
      */
     public function __construct(Container $container) {
         $this->container = $container;
+        //TODO: read config
+        //$dir = $this->get('upload_directory');
+        $this->documentMgr = new DocumentManager();//$dir);
     }
 
     /**
@@ -37,40 +57,41 @@ class DocumentController
      */
     function index(Request $request, Response $response, $args)
     {
-        //TODO: prepare file list
+        //TODO: search/prepare file list
         $data = [
             'TODO',
         ];
-        return $response->withStatus(200)
-            ->write(json_encode($data));
+        return $response->withStatus(static::STATUS_NOT_IMPLEMENTED)
+            ->withJson($data);
     }
 
     /**
+     * Store uploaded file, create a record and return it
      * @param Request  $request
      * @param Response $response
      * @return Response
      */
     function create(Request $request, Response $response, $args)
     {
-        //TODO: store uploaded file, create a record and return it
+        $output = ['error' => 'Bad request'];
+        $status = static::STATUS_BAD_REQUEST;
 
-        $uploadedFiles = $request->getUploadedFiles();
-
-        // handle single input with single file upload
-        $uploadedFile = $uploadedFiles['file'];
-        if ($uploadedFile->getError() === UPLOAD_ERR_OK) {
-            $filename = $this->moveUploadedFile($uploadedFile);
-            $response->write('uploaded ' . $filename . '<br/>');
+        $files  = $request->getUploadedFiles();
+        $meta   = $request->getParam('meta');
+        if (isset($files['file'])) {
+            /**
+             * @var UploadedFile
+             */
+            $file            = $files['file'];
+            $output['data']  = $this->documentMgr->storeUploadedFile($file, $meta);
+            $output['error'] = null;
+            $status          = static::STATUS_CREATED;
+        } else {
+            $output = ['error' => 'File is required'];
         }
 
-
-        $data = [
-            'id'   => 111,
-            'name' => 'file1.doc',
-            'url'  => '',
-        ];
-        return $response->withStatus(200)
-            ->write(json_encode($data));
+        return $response->withStatus($status)
+            ->withJson($output);
     }
 
     /**
@@ -80,12 +101,25 @@ class DocumentController
      */
     function retrieve(Request $request, Response $response, $args)
     {
+        if (empty($args['id'])) {
+            return $response->withStatus(static::STATUS_BAD_REQUEST)
+                ->withJson(json_encode(['error' => 'Missing document ID']));
+        }
+        $id = $args['id'];
+        $doc = $this->documentMgr->readInfoFile($id);
+        return $response->withStatus(static::STATUS_OK)
+            ->withJson($doc);
+    }
+
+    /**
+     * @param Request  $request
+     * @param Response $response
+     * @return Response
+     */
+    function download(Request $request, Response $response, $args)
+    {
         //TODO: use $args['id']
-        $data = [
-            'TODO',
-        ];
-        return $response->withStatus(200)
-            ->write(json_encode($data));
+        //TODO: return file
     }
 
     /**
@@ -100,7 +134,7 @@ class DocumentController
             'TODO',
         ];
         return $response->withStatus(200)
-            ->write(json_encode($data));
+            ->withJson($data);
     }
 
     /**
@@ -115,79 +149,7 @@ class DocumentController
             'deleted' => true,
         ];
         return $response->withStatus(200)
-            ->write(json_encode($data));
-    }
-
-    /**
-     * Moves the uploaded file to the upload directory and assigns it a unique name
-     * to avoid overwriting an existing uploaded file.
-     *
-     * @param UploadedFile $uploadedFile
-     * @return string
-     */
-    private function moveUploadedFile(UploadedFile $uploadedFile)
-    {
-        $dir  = $this->get('upload_directory');
-        $ext  = pathinfo($uploadedFile->getClientFilename(), PATHINFO_EXTENSION);
-        $id   = $this->randStr(64);
-        $name = sprintf('%s.%s', $id, $ext);
-
-        $uploadedFile->moveTo($dir . '/' . $name);
-
-        $this->writeMetaFile($uploadedFile, $id);
-
-        return $name;
-    }
-
-    /**
-     * @param UploadedFile $uploadedFile
-     * @param string       $id
-     * @return bool|int
-     */
-    private function writeMetaFile(UploadedFile $uploadedFile, $id)
-    {
-        $dir      = $this->get('upload_directory');
-        $meta     = sprintf('%s.%s', $id, '.meta.json');
-        $metaData = [
-            'name'       => $uploadedFile->getClientFilename(),
-            'media_type' => $uploadedFile->getClientMediaType(),
-            'size'       => $uploadedFile->getSize(),
-        ];
-        $json   = json_encode($metaData);
-        $result = file_put_contents($dir . '/' . $meta, $json);
-        return $result;
-    }
-
-    /**
-     * @param string $id
-     * @return array
-     */
-    private function readMetaFile($id)
-    {
-        $directory = $this->get('upload_directory');
-        $meta      = sprintf('%s.%s', $id, '.meta.json');
-        $json      = file_get_contents($directory . '/' . $meta);
-        $metaData  = json_decode($json, $assoc = true);
-        return $metaData;
-    }
-
-    /**
-     * @param int $len
-     * @return string
-     */
-    private function randStr($len)
-    {
-        $str   = '';
-        $chars = array_merge(
-            range('a','z'),
-            range('0','9')
-        );
-        $max = count($chars) - 1;
-        for ($i = 0; $i < $len; $i++) {
-            $rand = mt_rand(0, $max);
-            $str .= $chars[$rand];
-        }
-        return $str;
+            ->withJson($data);
     }
 
 
